@@ -61,3 +61,11 @@ If you ever want changes made, come back to Claude, describe what you
 want, and re-upload the changed files the same way (Add file → Upload
 files → they'll overwrite the old ones since the names match). The web
 address stays the same.
+
+**After uploading any update:** fully close the app on the phone
+(swipe it away like any other app, don't just background it) and
+reopen it. Because the app works offline, it keeps its own saved copy
+of the code — closing and reopening is what makes it check for and
+switch to the new version. This only needs to happen once per round of
+changes, not once per file.
+
