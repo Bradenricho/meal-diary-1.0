@@ -165,7 +165,7 @@ function resizeImageToBase64(file, maxDim, quality) {
 }
 
 function buildCSV(meals, entries) {
-  const header = ["Date", "Time", "Meal", "Carbs (g)", "Insulin (units)", "Before (mmol/L)", "+1h", "+2h", "+3h"];
+  const header = ["Date", "Time", "Meal", "Carbs (g)", "Insulin (units)", "Extended bolus (units)", "Before (mmol/L)", "+1h", "+2h", "+3h", "Notes"];
   const rows = entries
     .slice()
     .sort((a, b) => toDate(a.timestamp) - toDate(b.timestamp))
@@ -176,7 +176,7 @@ function buildCSV(meals, entries) {
         d.toLocaleDateString(),
         d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }),
         meal ? meal.name : "Meal",
-        e.carbs ?? "", e.insulin ?? "", e.preBSL ?? "", e.h1 ?? "", e.h2 ?? "", e.h3 ?? "",
+        e.carbs ?? "", e.insulin ?? "", e.extended ?? "", e.preBSL ?? "", e.h1 ?? "", e.h2 ?? "", e.h3 ?? "", e.notes ?? "",
       ];
     });
   const esc = (v) => {
@@ -412,6 +412,9 @@ function renderDiaryEntry(entry) {
   ].filter((s) => s.value !== null && s.value !== undefined && s.value !== "");
   const summaryLine = sequence.length ? `${sequence.map((s) => fmtNum(s.value)).join(" \u2192 ")} mmol/L` : "No blood sugar logged yet";
   const dueNow = getDueCheckpoints(entry);
+  const insulinText = entry.extended !== null && entry.extended !== undefined && entry.extended !== ""
+    ? `${fmtNum(entry.insulin)}u + ${fmtNum(entry.extended)}u extended`
+    : `${fmtNum(entry.insulin)}u insulin`;
 
   let detail = "";
   if (expanded) {
@@ -422,6 +425,11 @@ function renderDiaryEntry(entry) {
     detail = `
       <div class="diary-detail">
         <div class="detail-grid" data-entry-id="${entry.id}">${fields}</div>
+        <div class="entry-notes-wrap" data-entry-id="${entry.id}">
+          ${entry.notes
+            ? `<div class="field-row-label">Notes</div><div class="entry-notes-text">${escapeHtml(entry.notes)}</div><button type="button" class="btn-tiny-ghost" data-action="edit-notes" data-entry-id="${entry.id}">Edit note</button>`
+            : `<button type="button" class="btn-tiny-add" data-action="edit-notes" data-entry-id="${entry.id}">+ Add note</button>`}
+        </div>
         ${entry.photo ? `<div class="diary-photo"><img src="${entry.photo}" alt="Meal" /></div>` : ""}
         <div class="diary-actions">
           <button type="button" class="btn-ghost-danger" data-action="delete-entry-confirm" data-entry-id="${entry.id}">${ICONS.trash} Delete entry</button>
@@ -435,7 +443,7 @@ function renderDiaryEntry(entry) {
       <button type="button" class="diary-summary" data-action="toggle-entry" data-entry-id="${entry.id}">
         <div class="diary-summary-left">
           <div class="diary-date">${fmtDateTime(entry.timestamp)}</div>
-          <div class="diary-meta">${fmtNum(entry.carbs)}g carbs, ${fmtNum(entry.insulin)}u insulin</div>
+          <div class="diary-meta">${fmtNum(entry.carbs)}g carbs, ${insulinText}</div>
           <div class="diary-bsl">${summaryLine}</div>
         </div>
         ${dueNow.length > 0 && !expanded ? `<span class="chip chip-berry-outline">Add ${dueNow[0].label}</span>` : ""}
@@ -504,7 +512,7 @@ function renderTrendChart(entries) {
   const legend = usable.map((e, idx) => `
     <div class="trend-legend-item">
       <span class="trend-swatch" style="background:${LINE_COLORS[idx % LINE_COLORS.length]}"></span>
-      ${fmtShortDate(e.timestamp)} (${fmtNum(e.insulin)}u)
+      ${fmtShortDate(e.timestamp)} (${fmtNum(e.insulin)}u${e.extended !== null && e.extended !== undefined ? `+${fmtNum(e.extended)}u ext` : ""})
     </div>
   `).join("");
 
@@ -623,6 +631,11 @@ async function onMainClick(e) {
     return;
   }
 
+  if (action === "edit-notes") {
+    startEditNotes(btn.dataset.entryId);
+    return;
+  }
+
   if (action === "delete-entry-confirm") {
     if (btn.dataset.confirming === "1") {
       await deleteEntry(btn.dataset.entryId);
@@ -674,6 +687,32 @@ function startAddField(entryId, fieldKey) {
     renderMain();
   });
   document.getElementById(`inline-cancel-${entryId}-${fieldKey}`).addEventListener("click", () => renderMain());
+}
+
+function startEditNotes(entryId) {
+  const wrap = document.querySelector(`.entry-notes-wrap[data-entry-id="${entryId}"]`);
+  if (!wrap) return;
+  const entry = state.entries.find((x) => x.id === entryId);
+  const current = entry && entry.notes ? entry.notes : "";
+  wrap.innerHTML = `
+    <textarea class="field-input" id="notes-edit-${entryId}" rows="2" placeholder="e.g. extra cheese, ate late">${escapeHtml(current)}</textarea>
+    <div style="display:flex; gap:8px; margin-top:6px;">
+      <button type="button" class="btn-tiny-primary" id="notes-save-${entryId}">Save</button>
+      <button type="button" class="btn-tiny-ghost" id="notes-cancel-${entryId}">Cancel</button>
+    </div>
+  `;
+  const textarea = document.getElementById(`notes-edit-${entryId}`);
+  textarea.focus();
+  document.getElementById(`notes-save-${entryId}`).addEventListener("click", async () => {
+    const val = textarea.value.trim();
+    if (entry) {
+      entry.notes = val === "" ? null : val;
+      await persistEntries();
+      showToast("Note saved");
+    }
+    renderMain();
+  });
+  document.getElementById(`notes-cancel-${entryId}`).addEventListener("click", () => renderMain());
 }
 
 async function deleteEntry(entryId) {
@@ -765,8 +804,11 @@ function openLogEntrySheet(meal, prefillEntry) {
           <input id="entry-carbs" class="field-input" type="number" inputmode="decimal" />
           <label class="field-label" for="entry-insulin">Insulin (units)</label>
           <input id="entry-insulin" class="field-input" type="number" inputmode="decimal" step="0.5" placeholder="e.g. 4.5" />
+          <div id="extended-field-wrap"></div>
           <label class="field-label" for="entry-prebsl">Blood sugar before (mmol/L)</label>
           <input id="entry-prebsl" class="field-input" type="number" inputmode="decimal" step="0.1" placeholder="Optional" />
+          <label class="field-label" for="entry-notes">Notes</label>
+          <textarea id="entry-notes" class="field-input" rows="2" placeholder="Optional — e.g. extra cheese, ate late"></textarea>
           <label class="field-label">Photo</label>
           <div class="photo-field" id="photo-field">
             <button type="button" class="btn-secondary" id="photo-add-btn">${ICONS.camera} Add a photo</button>
@@ -783,6 +825,24 @@ function openLogEntrySheet(meal, prefillEntry) {
   document.getElementById("entry-carbs").value = prefillEntry ? prefillEntry.carbs : meal.carbs;
   document.getElementById("entry-insulin").value = prefillEntry ? prefillEntry.insulin : "";
   let photo = null;
+
+  const extendedWrap = document.getElementById("extended-field-wrap");
+  const prefillExtended = prefillEntry && prefillEntry.extended !== null && prefillEntry.extended !== undefined ? prefillEntry.extended : null;
+  function renderExtendedCollapsed() {
+    extendedWrap.innerHTML = `<button type="button" class="btn-tiny-add" id="add-extended-btn">+ Split with extended bolus</button>`;
+    document.getElementById("add-extended-btn").addEventListener("click", renderExtendedExpanded);
+  }
+  function renderExtendedExpanded() {
+    extendedWrap.innerHTML = `
+      <label class="field-label" for="entry-extended">Extended bolus (units)</label>
+      <div class="field-row-edit">
+        <input id="entry-extended" class="field-input field-input-inline" type="number" inputmode="decimal" step="0.5" placeholder="units" value="${prefillExtended !== null ? prefillExtended : ""}" />
+        <button type="button" class="btn-tiny-ghost" id="remove-extended-btn">Remove</button>
+      </div>
+    `;
+    document.getElementById("remove-extended-btn").addEventListener("click", renderExtendedCollapsed);
+  }
+  if (prefillExtended !== null) renderExtendedExpanded(); else renderExtendedCollapsed();
 
   const carbsEl = document.getElementById("entry-carbs");
   const insulinEl = document.getElementById("entry-insulin");
@@ -827,13 +887,18 @@ function openLogEntrySheet(meal, prefillEntry) {
   document.getElementById("cancel-btn").addEventListener("click", closeSheet);
 
   saveBtn.addEventListener("click", async () => {
+    const extEl = document.getElementById("entry-extended");
+    const extended = extEl && extEl.value !== "" && !Number.isNaN(Number(extEl.value)) ? Number(extEl.value) : null;
+    const notesVal = document.getElementById("entry-notes").value.trim();
     const entry = {
       id: uid(),
       mealId: meal.id,
       timestamp: fromInputLocal(document.getElementById("entry-when").value),
       carbs: Number(carbsEl.value),
       insulin: Number(insulinEl.value),
+      extended,
       preBSL: document.getElementById("entry-prebsl").value === "" ? null : Number(document.getElementById("entry-prebsl").value),
+      notes: notesVal === "" ? null : notesVal,
       h1: null, h2: null, h3: null,
       photo: photo || null,
     };
