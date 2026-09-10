@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Meal & Insulin Diary</title>
+<meta name="description" content="Carbs, insulin, and blood sugar readings, meal by meal." />
+
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#C98A2C" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Meal Diary" />
+<link rel="icon" href="icons/icon-192.png" />
+
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div id="app">
+  <div id="main"><div class="loading-state">Loading her meal diary…</div></div>
+</div>
+
+<div id="sheet-root" style="display:none"></div>
+<div id="toast" class="toast" style="display:none"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "Meal & Insulin Diary",
+  "short_name": "Meal Diary",
+  "description": "Carbs, insulin, and blood sugar readings, meal by meal.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EDE3D0",
+  "theme_color": "#C98A2C",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
